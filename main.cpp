@@ -4,33 +4,21 @@
 #include <string>
 using namespace std;
 
-// 按键表面常量
-enum KeyPressSurfaces
-{
-	KEY_PRESS_SURFACE_DEFAULT,
-	KEY_PRESS_SURFACE_UP,
-	KEY_PRESS_SURFACE_DOWN,
-	KEY_PRESS_SURFACE_LEFT,
-	KEY_PRESS_SURFACE_RIGHT,
-	KEY_PRESS_SURFACE_TOTAL
-};
+// 窗口大小
+const int SCREEN_WIDTH = 640;
+const int SCREEN_HEIGHT = 480;
 
 // 函数声明
 bool init();
 bool loadMedia();
 void close();
-SDL_Surface *loadSurface(const string &path);
+SDL_Texture* loadTexture(const string& path);
 
-// 窗口大小
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
 
 // 窗口指针
 SDL_Window *gWindow = NULL;
-// 窗口表面，用于绘制，是窗口的一个矩形区域，可以用来绘制图像，文本等
-SDL_Surface *gScreenSurface = NULL;
-SDL_Surface *gKeyPressSurfaces[KEY_PRESS_SURFACE_TOTAL];
-SDL_Surface *gCurrentSurface = NULL;
+SDL_Renderer *gRenderer = NULL;
+SDL_Texture *gTexture = NULL;
 
 bool init()
 {
@@ -41,6 +29,12 @@ bool init()
 		return false;
 	}
 
+	if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1"))
+	{
+		printf("Warning: Linear texture filtering not enabled!");
+		return false;
+	}
+
 	// 创建窗口
 	gWindow = SDL_CreateWindow("SDL Tutorial", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
 	if (gWindow == NULL)
@@ -48,6 +42,17 @@ bool init()
 		printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
 		return false;
 	}
+
+	// 创建渲染器
+	gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_ACCELERATED);
+	if (gRenderer == NULL)
+	{
+		printf("Renderer could not be created! SDL Error: %s\n", SDL_GetError());
+		return false;
+	}
+	// 初始化渲染器颜色
+	SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
+
 	// 初始化 SDL_image 库
 	int imgFlags = IMG_INIT_PNG;
 	if (!(IMG_Init(imgFlags) & imgFlags))
@@ -55,9 +60,6 @@ bool init()
 		printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
 		return false;
 	}
-
-	// 获取窗口表面
-	gScreenSurface = SDL_GetWindowSurface(gWindow);
 	return true;
 }
 
@@ -67,10 +69,10 @@ bool loadMedia()
 	bool success = true;
 
 	// Load stretching surface
-	gCurrentSurface = loadSurface("loaded.png");
-	if (gCurrentSurface == NULL)
+	gTexture = loadTexture("texture.png");
+	if (gTexture == NULL)
 	{
-		printf("Failed to load stretching image!\n");
+		printf("Failed to load texture image!\n");
 		success = false;
 	}
 	return success;
@@ -78,33 +80,40 @@ bool loadMedia()
 
 void close()
 {
-	// 销毁窗口
+	// 释放纹理资源
+	SDL_DestroyTexture(gTexture);
+	gTexture = NULL;
+
+	// 释放渲染器
+	SDL_DestroyRenderer(gRenderer);
+	gRenderer = NULL;
+	// 释放窗口
 	SDL_DestroyWindow(gWindow);
+	gWindow = NULL;
+
 	// 退出SDL子系统
+	IMG_Quit();
 	SDL_Quit();
 }
 
-SDL_Surface *loadSurface(const string &path)
+SDL_Texture* loadTexture(const string& path)
 {
-
-	SDL_Surface *optimizedSurface = NULL;
-	// 加载图片
-	SDL_Surface *loadedSurface = IMG_Load(path.c_str());
-	if (loadedSurface == NULL)
+	SDL_Texture* newTexture = NULL;
+	//SDL_Surface* loadedSurface = IMG_Load(path.c_str());
+	//if (loadedSurface == NULL)
+	//{
+	//	printf("Unable to load image %s! SDL_image Error: %s\n", path.c_str(), IMG_GetError());
+	//	
+	//}
+	//Create texture from surface pixels
+	newTexture = IMG_LoadTexture(gRenderer,path.c_str());
+	if (newTexture == NULL)
 	{
-		printf("Unable to load image %s! SDL Error: %s\n", path.c_str(), SDL_GetError());
-		return NULL;
+		printf("Unable to create texture from %s! SDL Error: %s\n", path.c_str(), SDL_GetError());
 	}
-	// 转换图片格式
-	optimizedSurface = SDL_ConvertSurface(loadedSurface, gScreenSurface->format, 0);
-	if (optimizedSurface == NULL)
-	{
-		printf("Unable to optimize image %s! SDL Error: %s\n", path.c_str(), SDL_GetError());
-		return NULL;
-	}
-	// 释放原图片
-	SDL_FreeSurface(loadedSurface);
-	return optimizedSurface;
+	//Get rid of old loaded surface
+	//SDL_FreeSurface(loadedSurface);
+	return newTexture;	
 }
 
 int main(int argc, char *args[])
@@ -129,16 +138,12 @@ int main(int argc, char *args[])
 			}
 		}
 
-		// 填充窗口表面
-		SDL_Rect stretchRect;
-		stretchRect.x = 0;
-		stretchRect.y = 0;
-		stretchRect.w = SCREEN_WIDTH;
-		stretchRect.h = SCREEN_HEIGHT;
-		SDL_BlitScaled(gCurrentSurface, NULL, gScreenSurface, &stretchRect);
-
-		// 更新窗口表面
-		SDL_UpdateWindowSurface(gWindow);
+		//Clear screen
+		SDL_RenderClear(gRenderer);
+		//Render texture to screen
+		SDL_RenderCopy(gRenderer, gTexture, NULL, NULL);
+		//Update screen
+		SDL_RenderPresent(gRenderer);
 	}
 	close();
 	return 0;
