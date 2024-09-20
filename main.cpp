@@ -34,10 +34,11 @@ bool init()
 	return true;
 }
 
-bool loadMedia(const string& path, SDL_Surface*& targetSurface)
+bool loadMedia(const string &path, SDL_Surface *&targetSurface)
 {
 	// 如果目标表面已经有内容，先释放
-	if (targetSurface != NULL) {
+	if (targetSurface != NULL)
+	{
 		SDL_FreeSurface(targetSurface);
 		targetSurface = NULL;
 	}
@@ -68,10 +69,6 @@ int main(int argc, char *args[])
 	// 加载媒体资源
 	string path = "hello_world.bmp";
 	loadMedia(path, gHelloWorld);
-	// 混合图像到窗口表面
-	SDL_BlitSurface(gHelloWorld, NULL, gScreenSurface, NULL);
-	// 更新窗口表面
-	SDL_UpdateWindowSurface(gWindow);
 
 	SDL_Event e;
 	bool quit = false;
@@ -83,6 +80,10 @@ int main(int argc, char *args[])
 			if (e.type == SDL_QUIT)
 				quit = true;
 		}
+		// 混合图像到窗口表面
+		SDL_BlitSurface(gHelloWorld, NULL, gScreenSurface, NULL);
+		// 更新窗口表面
+		SDL_UpdateWindowSurface(gWindow);
 	}
 	close();
 	return 0;
