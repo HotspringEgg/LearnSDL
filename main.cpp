@@ -3,6 +3,9 @@
 #include <SDL3_image/SDL_image.h>
 #include <string>
 #include <cmath>
+#include <iostream>
+
+using namespace std;
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
@@ -14,7 +17,10 @@ public:
 	~LTexture();
 	bool loadFromFile(std::string path);
 	void free();
-	void render(int x, int y, SDL_FRect *clip = NULL);
+	void setColor(Uint8 red, Uint8 green, Uint8 blue);
+	void setBlendMode(SDL_BlendMode blending);
+	void setAlpha(Uint8 alpha);
+	void render(int x, int y, SDL_FRect* clip = NULL, double angle = 0.0, SDL_FPoint* center = NULL, SDL_FlipMode flip = SDL_FLIP_NONE);
 	int getWidth();
 	int getHeight();
 
@@ -32,8 +38,7 @@ SDL_Window *gWindow = NULL;
 SDL_Renderer *gRenderer = NULL;
 
 // Scene textures
-SDL_FRect gSpriteClips[4];
-LTexture gSpriteSheetTexture;
+LTexture gArrowTexture;	
 
 LTexture::LTexture()
 {
@@ -85,7 +90,22 @@ void LTexture::free()
 	}
 }
 
-void LTexture::render(int x, int y, SDL_FRect *clip)
+void LTexture::setColor(Uint8 red, Uint8 green, Uint8 blue)
+{
+	SDL_SetTextureColorMod(mTexture, red, green, blue);
+}
+
+void LTexture::setBlendMode(SDL_BlendMode blending)
+{
+	SDL_SetTextureBlendMode(mTexture, blending);
+}
+
+void LTexture::setAlpha(Uint8 alpha)
+{
+	SDL_SetTextureAlphaMod(mTexture, alpha);
+}
+
+void LTexture::render(int x, int y, SDL_FRect *clip, double angle, SDL_FPoint* center, SDL_FlipMode flip)
 {
 	SDL_FRect renderQuad = {(float)x, (float)y, (float)mWidth, (float)mHeight};
 	if (clip != NULL)
@@ -94,7 +114,7 @@ void LTexture::render(int x, int y, SDL_FRect *clip)
 		renderQuad.h = clip->h;
 	}
 	// 将纹理clip位置的图像渲染到窗口renderQuad位置
-	SDL_RenderTexture(gRenderer, mTexture, clip, &renderQuad);
+	SDL_RenderTextureRotated(gRenderer, mTexture, clip, &renderQuad, angle, center, flip);
 }
 
 int LTexture::getWidth()
@@ -122,6 +142,9 @@ bool init()
 		return false;
 	}
 
+	// enable vsync
+	SDL_SetRenderVSync(gRenderer, 1);
+
 	// Initialize renderer color
 	SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
 	return true;
@@ -130,43 +153,19 @@ bool init()
 bool loadMedia()
 {
 	// Load PNG texture
-	if (!gSpriteSheetTexture.loadFromFile("dots.bmp"))
+	if (!gArrowTexture.loadFromFile("arrow.bmp"))
 	{
-		SDL_Log("Failed to load sprite sheet texture!\n");
+		SDL_Log("Failed to load sprite fadeout texture!\n");
 		return false;
 	}
 
-	// Set top left sprite
-	gSpriteClips[0].x = 0;
-	gSpriteClips[0].y = 0;
-	gSpriteClips[0].w = 100;
-	gSpriteClips[0].h = 100;
-
-	// Set top right sprite
-	gSpriteClips[1].x = 100;
-	gSpriteClips[1].y = 0;
-	gSpriteClips[1].w = 100;
-	gSpriteClips[1].h = 100;
-
-	// Set bottom left sprite
-	gSpriteClips[2].x = 0;
-	gSpriteClips[2].y = 100;
-	gSpriteClips[2].w = 100;
-	gSpriteClips[2].h = 100;
-
-	// Set bottom right sprite
-	gSpriteClips[3].x = 100;
-	gSpriteClips[3].y = 100;
-	gSpriteClips[3].w = 100;
-	gSpriteClips[3].h = 100;
 	return true;
 }
 
 void close()
 {
 	// Free loaded image
-	gSpriteSheetTexture.free();
-
+	gArrowTexture.free();
 	// Destroy window
 	SDL_DestroyRenderer(gRenderer);
 	SDL_DestroyWindow(gWindow);
@@ -197,6 +196,8 @@ int main(int argc, char *args[])
 	bool quit = false;
 	// Event handler
 	SDL_Event e;
+	double degrees = 0;
+	SDL_FlipMode flipType = SDL_FLIP_NONE;
 	// While application is running
 	while (!quit)
 	{
@@ -208,14 +209,40 @@ int main(int argc, char *args[])
 			{
 				quit = true;
 			}
+			else if (e.type == SDL_EVENT_KEY_DOWN)
+			{
+				if (e.key.key == SDLK_ESCAPE)
+				{
+					quit = true;
+				}
+				else if (e.key.key == SDLK_A)
+				{
+					degrees -= 60;
+					cout << "degrees: " << degrees << endl;
+				}
+				else if (e.key.key == SDLK_D)
+				{
+					degrees += 60;
+				}
+				else if (e.key.key == SDLK_Q)
+				{
+					flipType = SDL_FLIP_HORIZONTAL;
+				}
+				else if (e.key.key == SDLK_W)
+				{
+					flipType = SDL_FLIP_NONE;
+				}
+				else if (e.key.key == SDLK_E)
+				{
+					flipType = SDL_FLIP_VERTICAL;
+				}
+			}
 		}
 		SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
 		SDL_RenderClear(gRenderer);
 
-		gSpriteSheetTexture.render(0, 0, &gSpriteClips[0]);
-		gSpriteSheetTexture.render(SCREEN_WIDTH - gSpriteClips[1].w, 0, &gSpriteClips[1]);
-		gSpriteSheetTexture.render(0, SCREEN_HEIGHT - gSpriteClips[2].h, &gSpriteClips[2]);
-		gSpriteSheetTexture.render(SCREEN_WIDTH - gSpriteClips[3].w, SCREEN_HEIGHT - gSpriteClips[3].h, &gSpriteClips[3]);
+		gArrowTexture.render((SCREEN_WIDTH - gArrowTexture.getWidth()) / 2, (SCREEN_HEIGHT - gArrowTexture.getHeight()) / 2, NULL, degrees, NULL, flipType);
+		
 		// 更新屏幕
 		SDL_RenderPresent(gRenderer);
 	}
