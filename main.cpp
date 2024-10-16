@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3_image/SDL_image.h>
+//#include <SDL3_ttf/SDL_ttf.h>
 #include <string>
 #include <cmath>
 #include <iostream>
@@ -16,6 +17,12 @@ public:
 	LTexture();
 	~LTexture();
 	bool loadFromFile(std::string path);
+
+#if defined(SDL_TTF_MAJOR_VERSION)
+	//Creates image from font string
+	bool loadFromRenderedText(std::string textureText, SDL_Color textColor);
+#endif
+
 	void free();
 	void setColor(Uint8 red, Uint8 green, Uint8 blue);
 	void setBlendMode(SDL_BlendMode blending);
@@ -30,15 +37,32 @@ private:
 	int mHeight;
 };
 
+class Dot
+{
+public:
+	static const int DOT_WIDTH = 20;
+	static const int DOT_HEIGHT = 20;
+	static const int DOT_VEL = 10;
+	Dot();
+	void handleEvent(SDL_Event& e);
+	void move(SDL_Rect& wall);
+	void render();
+
+private:
+	int mPosX, mPosY;
+	int mVelX, mVelY;
+	SDL_Rect mCollider;
+};
+
 bool init();
 bool loadMedia();
 void close();
+bool checkCollision(SDL_Rect a, SDL_Rect b);
 
 SDL_Window *gWindow = NULL;
 SDL_Renderer *gRenderer = NULL;
 
-// Scene textures
-LTexture gArrowTexture;	
+LTexture gDotTexture;
 
 LTexture::LTexture()
 {
@@ -78,6 +102,30 @@ bool LTexture::loadFromFile(std::string path)
 	mTexture = newTexture;
 	return mTexture != NULL;
 }
+
+#if defined(SDL_TTF_MAJOR_VERSION)
+bool LTexture::loadFromRenderedText(std::string textureText, SDL_Color textColor)
+{
+	free();
+	SDL_Surface* textSurface = TTF_RenderText_Blended(gFont, textureText.c_str(), 0, textColor);
+	if (textSurface == NULL)
+	{
+		SDL_Log("Unable to render text surface! SDL_ttf Error: %s\n", SDL_GetError());
+		return false;
+	}
+	mTexture = SDL_CreateTextureFromSurface(gRenderer, textSurface);
+	if (mTexture == NULL)
+	{
+		SDL_Log("Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError());
+		return false;
+	}
+	mWidth = textSurface->w;
+	mHeight = textSurface->h;
+	SDL_DestroySurface(textSurface);
+
+	return mTexture != NULL;
+}
+#endif
 
 void LTexture::free()
 {
@@ -127,6 +175,79 @@ int LTexture::getHeight()
 	return mHeight;
 }
 
+Dot::Dot()
+{
+	mPosX = 0;
+	mPosY = 0;
+	mCollider.w = DOT_WIDTH;
+	mCollider.h = DOT_HEIGHT;
+	mVelX = 0;
+	mVelY = 0;
+}
+
+void Dot::handleEvent(SDL_Event& e)
+{
+	if (e.type == SDL_EVENT_KEY_DOWN && e.key.repeat == 0)
+	{
+		switch (e.key.key)
+		{
+		case SDLK_UP:
+			mVelY -= DOT_VEL;
+			break;
+		case SDLK_DOWN:
+			mVelY += DOT_VEL;
+			break;
+		case SDLK_LEFT:
+			mVelX -= DOT_VEL;
+			break;
+		case SDLK_RIGHT:
+			mVelX += DOT_VEL;
+			break;
+		}
+	}
+	else if (e.type == SDL_EVENT_KEY_UP && e.key.repeat == 0)
+	{
+		switch (e.key.key)
+		{
+		case SDLK_UP:
+			mVelY += DOT_VEL;
+			break;
+		case SDLK_DOWN:
+			mVelY -= DOT_VEL;
+			break;
+		case SDLK_LEFT:
+			mVelX += DOT_VEL;
+			break;
+		case SDLK_RIGHT:
+			mVelX -= DOT_VEL;
+			break;
+		}
+	}
+}
+
+void Dot::move(SDL_Rect &wall)
+{
+	mPosX += mVelX;
+	mCollider.x = mPosX;
+	if ((mPosX < 0) || (mPosX + DOT_WIDTH > SCREEN_WIDTH) || checkCollision(mCollider, wall))
+	{
+		mPosX -= mVelX;
+		mCollider.x = mPosX;
+	}
+	mPosY += mVelY;
+	mCollider.y = mPosY;
+	if ((mPosY < 0) || (mPosY + DOT_HEIGHT > SCREEN_HEIGHT))
+	{
+		mPosY -= mVelY;
+		mCollider.y = mPosY;
+	}
+}
+
+void Dot::render()
+{
+	gDotTexture.render(mPosX, mPosY);
+}
+
 bool init()
 {
 	if (!SDL_Init(SDL_INIT_VIDEO))
@@ -147,25 +268,26 @@ bool init()
 
 	// Initialize renderer color
 	SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
+
 	return true;
 }
 
 bool loadMedia()
 {
-	// Load PNG texture
-	if (!gArrowTexture.loadFromFile("arrow.bmp"))
+	// Load PNG texture¡¢
+	if (!gDotTexture.loadFromFile("dot.bmp"))
 	{
-		SDL_Log("Failed to load sprite fadeout texture!\n");
+		SDL_Log("Failed to load dot texture!\n");
 		return false;
 	}
-
+	
 	return true;
 }
 
 void close()
 {
 	// Free loaded image
-	gArrowTexture.free();
+	gDotTexture.free();
 	// Destroy window
 	SDL_DestroyRenderer(gRenderer);
 	SDL_DestroyWindow(gWindow);
@@ -192,13 +314,10 @@ int main(int argc, char *args[])
 		return -1;
 	}
 
-	// Main loop flag
+
 	bool quit = false;
-	// Event handler
 	SDL_Event e;
-	double degrees = 0;
-	SDL_FlipMode flipType = SDL_FLIP_NONE;
-	// While application is running
+	Dot dot;
 	while (!quit)
 	{
 		// Handle events on queue
@@ -215,34 +334,17 @@ int main(int argc, char *args[])
 				{
 					quit = true;
 				}
-				else if (e.key.key == SDLK_A)
-				{
-					degrees -= 60;
-					cout << "degrees: " << degrees << endl;
-				}
-				else if (e.key.key == SDLK_D)
-				{
-					degrees += 60;
-				}
-				else if (e.key.key == SDLK_Q)
-				{
-					flipType = SDL_FLIP_HORIZONTAL;
-				}
-				else if (e.key.key == SDLK_W)
-				{
-					flipType = SDL_FLIP_NONE;
-				}
-				else if (e.key.key == SDLK_E)
-				{
-					flipType = SDL_FLIP_VERTICAL;
-				}
 			}
+			dot.handleEvent(e);
 		}
+
+		dot.move();
+
 		SDL_SetRenderDrawColor(gRenderer, 0xFF, 0xFF, 0xFF, 0xFF);
 		SDL_RenderClear(gRenderer);
 
-		gArrowTexture.render((SCREEN_WIDTH - gArrowTexture.getWidth()) / 2, (SCREEN_HEIGHT - gArrowTexture.getHeight()) / 2, NULL, degrees, NULL, flipType);
 		
+		dot.render();
 		// ¸üÐÂÆÁÄ»
 		SDL_RenderPresent(gRenderer);
 	}
